@@ -1,68 +1,87 @@
-# Scripts
-
-```
-# Set up (see https://code.visualstudio.com/api/working-with-extensions/publishing-extension)
-npm install -g vsce
-
-# Build and package
-(cd ./ckeditor5-build-markdown && npm run build)
-# Remember to increment the version in package.json
-vsce package
-code --force --install-extension $(find -name "markdown-wysiwyg*" | tail -1)
-
-# Publish extension
-vsce publish
-npx ovsx publish -p ${OVSX_TOKEN}
-
-# Run CKEditor5 subproject
-(cd ./ckeditor5-build-markdown && npm start)
-```
-
 # Architecture
 
-Implements a `CustomTextEditor` for markdown (.md) files.
+## How it works
 
-Our `CustomTextEditor` implementation (called `MarkdownEditorProvider`) is defined in `markdownEditor.js` and registers a webview to show the user when that editor is active
+This is a VS Code [Custom Text Editor](https://code.visualstudio.com/api/extension-guides/custom-editors#custom-text-editor) for `.md` files. The extension registers a `CustomTextEditorProvider` (`MarkdownEditorProvider`) that opens a webview instead of VS Code's default text editor.
 
-Communication between the webview and VS Code is done using `vscode.postMessage` and is described [here](https://code.visualstudio.com/api/extension-guides/custom-editors#custom-text-editor)
-
-The method `getHtmlForWebview` defines what this webview looks like, in our case importing and rendering a custom CKEditor5 build for markdown from the folder `ckeditor5-build-markdown`. It then runs `markdownEditorInitScript` inside the webview to register.
-
-# TODO
-
-- Add autolink to CKE editor
-- Sync scroll position (to plain editor and to markdown preview)
-  - Do it like this [https://stackoverflow.com/questions/54556208/scroll-to-marker-in-ckeditor-5](https://stackoverflow.com/questions/54556208/scroll-to-marker-in-ckeditor-5)
-  - And need this for importing that function [https://stackoverflow.com/questions/61307979/how-to-import-npm-packages-in-vs-code-webview-extension-development](https://stackoverflow.com/questions/61307979/how-to-import-npm-packages-in-vs-code-webview-extension-development)
-- Remove breadcrumb
-  - [https://github.com/microsoft/vscode-extension-samples/issues/369#issuecomment-754231994](https://github.com/microsoft/vscode-extension-samples/issues/369#issuecomment-754231994)
-  - [https://vscode-dev-community.slack.com/archives/C74CB59NE/p1644800862386389](https://vscode-dev-community.slack.com/archives/C74CB59NE/p1644800862386389)
-- Add code formatting
-  - [https://github.com/ckeditor/ckeditor5/issues/1354](https://github.com/ckeditor/ckeditor5/issues/1354)
-  - [https://github.com/ckeditor/ckeditor5/issues/6309](https://github.com/ckeditor/ckeditor5/issues/6309)
-  - [https://github.com/ckeditor/ckeditor5/issues/436](https://github.com/ckeditor/ckeditor5/issues/436)
-  - [https://github.com/ckeditor/ckeditor5/issues/5769](https://github.com/ckeditor/ckeditor5/issues/5769)
-  - I couldnt get this working without errors
-    - [https://github.com/regischen/CKEditor5-CodeBlock-With-Syntax-Highlight](https://github.com/regischen/CKEditor5-CodeBlock-With-Syntax-Highlight)
-- Support pasting clipboard images like [https://github.com/telesoho/vscode-markdown-paste-image](https://github.com/telesoho/vscode-markdown-paste-image)
-  - Will need this [https://ckeditor.com/docs/ckeditor5/latest/framework/guides/deep-dive/upload-adapter.html](https://ckeditor.com/docs/ckeditor5/latest/framework/guides/deep-dive/upload-adapter.html)
-  - [https://vscode-dev-community.slack.com/archives/C74CB59NE/p1647204814315079](https://vscode-dev-community.slack.com/archives/C74CB59NE/p1647204814315079)
-- Support DocumentSymbolProvider so that the outline and breadcrumb views aren't blank
-  - [https://stackoverflow.com/a/59132169/3620725](https://stackoverflow.com/a/59132169/3620725)
-  - Need this upstream issue completed first: [https://github.com/microsoft/vscode/issues/97095](https://github.com/microsoft/vscode/issues/97095)
-- Support extended HTML features [https://ckeditor.com/docs/ckeditor5/latest/features/markdown.html#extending-formatting-support](https://ckeditor.com/docs/ckeditor5/latest/features/markdown.html#extending-formatting-support)
-- Figure out how to toggle between editors without saving and without showing a popup prompt
-  - [https://github.com/microsoft/vscode/issues/169921](https://github.com/microsoft/vscode/issues/169921)
-- Improve support for keyboard shortcuts, eg. the shortcut should automatically appear in brackets when hovering the toolbar button
-  - [https://ckeditor.com/docs/ckeditor5/latest/framework/guides/plugins/abbreviation-plugin/abbreviation-plugin-level-1.html](https://ckeditor.com/docs/ckeditor5/latest/framework/guides/plugins/abbreviation-plugin/abbreviation-plugin-level-1.html)
-  - How does it work for built in shortcuts?  [https://github.com/ckeditor/ckeditor5/blob/7dea975058cfa1bd0c6b6b42a96187c3706547d9/packages/ckeditor5-basic-styles/src/bold/boldui.ts#L41](https://github.com/ckeditor/ckeditor5/blob/7dea975058cfa1bd0c6b6b42a96187c3706547d9/packages/ckeditor5-basic-styles/src/bold/boldui.ts#L41)
-- Fix the following markdown not being shown as bullets
+The webview runs a self-contained [CodeMirror 6](https://codemirror.net/) editor. The extension host and webview communicate exclusively via `postMessage` — there is no shared memory.
 
 ```
-- one
-
-- two
-- three
+VS Code extension host          │  Webview (iframe)
+────────────────────────────────┼──────────────────────────────────
+markdownEditor.ts               │  codemirror-editor.js
+  MarkdownEditorProvider        │    CodeMirror EditorView
+  - manages document lifecycle  │    - livePreview ViewPlugin
+  - prettier formatting on save │    - tableDecoField StateField
+  - postMessage ↔ webview       │    - docBaseUriField StateField
+                                │    - linkHandler domEventHandlers
 ```
 
-- Don't clear undo history on save
+## Libraries
+
+| Library | Role |
+|---|---|
+| [CodeMirror 6](https://codemirror.net/) (`@codemirror/view`, `@codemirror/state`, `@codemirror/language`, `@codemirror/commands`) | Editor engine — input handling, decoration system, state management |
+| [`@codemirror/lang-markdown`](https://github.com/codemirror/lang-markdown) | Markdown language support (syntax highlighting, AST integration) |
+| [`@lezer/markdown`](https://github.com/lezer-parser/markdown) + `GFM` | Lezer parser for markdown; `GFM` extension adds GitHub Flavored Markdown (tables, strikethrough, task lists) |
+| [Prettier](https://prettier.io/) | Auto-formats markdown on save (extension host side only) |
+| [Webpack 5](https://webpack.js.org/) | Dual-target build: `node` for the extension host, `web` for the webview bundle |
+
+## Message protocol
+
+| Direction | Type | Payload | When |
+|---|---|---|---|
+| ext → webview | `documentChanged` | `{ text }` | Document opened or saved |
+| ext → webview | `config` | `{ docBaseUri }` | After `initialized` — webview-safe URI for the document's directory |
+| ext → webview | `scrollChanged` | `{ scrollTop }` | Text editor scrolls (not yet consumed by webview) |
+| webview → ext | `initialized` | — | Webview JS finished loading |
+| webview → ext | `webviewChanged` | `{ text }` | User edits content |
+| webview → ext | `openLink` | `{ url }` | Ctrl/Cmd+click on a link or image |
+| webview → ext | `plainPaste` | — | Plain-text paste shortcut |
+
+## Live preview decoration system
+
+`buildDecorations(view)` in `codemirror-editor.js` walks the lezer syntax tree over `view.visibleRanges` on every `docChanged`, `selectionSet`, or `viewportChanged` event.
+
+**Pattern per node type:**
+
+| Node | Cursor outside | Cursor inside |
+|---|---|---|
+| `ATXHeading` | `Decoration.line({ class: 'cm-md-hN' })` | same (descend for `HeaderMark`) |
+| `FencedCode`, `Blockquote` | `Decoration.line({ class })` per line | same |
+| `StrongEmphasis`, `Emphasis`, `InlineCode`, `Strikethrough`, `Link` | `Decoration.mark({ class })` | same (descend for marks) |
+| `Image` | `Decoration.replace({ widget: ImageWidget })` | `Decoration.mark({ class: 'cm-md-link' })` + descend |
+| `Table` (StateField) | `Decoration.replace({ widget: TableWidget })` | raw (widget suppressed) |
+| `HeaderMark`, `EmphasisMark`, etc. | `Decoration.replace({})` (hidden) | `Decoration.mark({ class: 'cm-md-mark' })` (dimmed) |
+| `ListMark` (bullet) | `Decoration.replace({ widget: BulletWidget })` | `Decoration.mark({ class: 'cm-md-mark' })` (dimmed) |
+
+Tables use a separate `StateField` (`tableDecoField`) rather than `buildDecorations` because they need to walk the whole document, not just visible ranges.
+
+Images use a `docBaseUriField` StateField (populated via `StateEffect` when the `config` message arrives) to resolve local relative paths to `vscode-resource:` URIs.
+
+---
+
+# Gaps & planned work
+
+## Broken / incomplete
+
+- **Scroll sync to webview** — extension sends `scrollChanged` but `init()` never listens for it; the webview doesn't scroll when the split text editor scrolls
+- **Prettier replaces full document on save** — jumps cursor position; should use targeted `WorkspaceEdit` with a diff instead of a full range replace
+- **Image `../` paths** — paths going up directories are not resolved; simple path normalization needed
+
+## Missing features (high priority)
+
+- **Task list checkboxes** (`- [ ]` / `- [x]`) — extremely common in Obsidian-style notes; should render as real checkboxes and toggle on click without losing focus
+- **Ordered lists** — `1.` items have no visual styling; need indentation and marker styling equivalent to bullet lists
+- **Nested list indentation** — no visual hierarchy between list levels regardless of list type
+
+## Missing features (lower priority)
+
+- **YAML front matter** — common in Hugo, Jekyll, Obsidian; currently shows as raw text; should be visually distinguished (dimmed block or hidden)
+- **Inline HTML** — `<br>`, `<mark>`, `<kbd>` etc. show as raw text
+- **Link hover tooltip** — show URL in a small tooltip on Ctrl/Cmd hover (currently just changes cursor)
+- **Document outline / folding** — no structure navigation; `DocumentSymbolProvider` would enable VS Code's outline panel
+
+## Known issues (existing)
+
+- **Table click-to-edit unreliable** — CM6 cannot map click coordinates inside a `Decoration.replace` widget to document positions. The widget dispatches cursor on `mousedown` but focus/selection is inconsistent. Possible fix: per-line `Decoration.line` instead of a block replace widget (trades visual fidelity for editability).
