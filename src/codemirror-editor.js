@@ -1,5 +1,5 @@
 import { EditorView, ViewPlugin, Decoration, WidgetType, keymap, drawSelection } from '@codemirror/view';
-import { EditorState, RangeSet } from '@codemirror/state';
+import { EditorState, RangeSet, StateField } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { GFM } from '@lezer/markdown';
 import { syntaxTree } from '@codemirror/language';
@@ -80,6 +80,34 @@ const vsCodeTheme = EditorView.theme({
 	// ── Links ─────────────────────────────────────────────────────────────
 	'.cm-md-link': { color: 'var(--vscode-textLink-foreground)' },
 	'&.cm-link-hover .cm-md-link': { cursor: 'pointer', textDecoration: 'underline' },
+	// ── Table ─────────────────────────────────────────────────────────────
+	'.cm-md-table': { borderCollapse: 'collapse', width: '100%', marginBottom: '1em' },
+	'.cm-md-table th, .cm-md-table td': {
+		border: '1px solid var(--vscode-badge-background)',
+		padding: '6px 12px',
+		textAlign: 'left',
+	},
+	'.cm-md-table th': {
+		backgroundColor: 'var(--vscode-textBlockQuote-background)',
+		fontWeight: 'bold',
+	},
+	'.cm-md-table tr:nth-child(even)': {
+		backgroundColor: 'var(--vscode-textBlockQuote-background)',
+	},
+	// ── Table ─────────────────────────────────────────────────────────────
+	'.cm-md-table': { borderCollapse: 'collapse', width: '100%', marginBottom: '1em' },
+	'.cm-md-table th, .cm-md-table td': {
+		border: '1px solid var(--vscode-badge-background)',
+		padding: '6px 12px',
+		textAlign: 'left',
+	},
+	'.cm-md-table th': {
+		backgroundColor: 'var(--vscode-textBlockQuote-background)',
+		fontWeight: 'bold',
+	},
+	'.cm-md-table tr:nth-child(even) td': {
+		backgroundColor: 'var(--vscode-textBlockQuote-background)',
+	},
 	// ── Bullet replacement ────────────────────────────────────────────────
 	'.cm-md-bullet': {
 		display: 'inline-block',
@@ -251,6 +279,92 @@ const livePreview = ViewPlugin.fromClass(
 	{ decorations: (v) => v.decorations }
 );
 
+// ─── Table rendering ─────────────────────────────────────────────────────────
+
+class TableWidget extends WidgetType {
+	constructor(markdown, from, rowOffsets) {
+		super();
+		this.markdown = markdown;
+		this.from = from;
+		this.rowOffsets = rowOffsets;
+	}
+	eq(other) { return other.markdown === this.markdown && other.from === this.from; }
+	ignoreEvent() { return false; }
+	toDOM(view) {
+		const rows = this.markdown.trim().split('\n');
+		const table = document.createElement('table');
+		table.className = 'cm-md-table';
+		let rowIdx = 0;
+		rows.forEach((row, i) => {
+			if (/^[\s|:-]+$/.test(row)) return; // skip separator row
+			const cells = row.split('|').map(c => c.trim()).filter((c, idx, arr) =>
+				!(idx === 0 && c === '') && !(idx === arr.length - 1 && c === '')
+			);
+			const tr = document.createElement('tr');
+			tr.dataset.pos = String(this.rowOffsets[rowIdx] ?? this.from);
+			rowIdx++;
+			cells.forEach(text => {
+				const td = document.createElement(i === 0 ? 'th' : 'td');
+				td.textContent = text;
+				tr.appendChild(td);
+			});
+			table.appendChild(tr);
+		});
+		const tableFrom = this.from;
+		table.addEventListener('mousedown', (e) => {
+			let el = e.target;
+			while (el && el.tagName !== 'TR') el = el.parentElement;
+			const pos = el && el.dataset.pos != null ? Number(el.dataset.pos) : tableFrom;
+			e.preventDefault();
+			view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+			view.focus();
+		});
+		return table;
+	}
+}
+
+function buildTableDecorations(state) {
+	const sel = state.selection.main;
+	const doc = state.doc;
+	const ranges = [];
+	const seen = new Set();
+	syntaxTree(state).iterate({
+		enter(node) {
+			if (node.name !== 'Table') return;
+			const { from: nFrom, to: nTo } = node;
+			if (seen.has(nFrom)) return false;
+			seen.add(nFrom);
+			const tableFrom = doc.lineAt(nFrom).from;
+			const lastLine = doc.lineAt(Math.max(nFrom, nTo - 1));
+			const tableTo = lastLine.to;
+			if (sel.from <= tableTo && sel.to >= tableFrom) return false; // cursor inside — show raw
+			const md = doc.sliceString(tableFrom, tableTo);
+			// build per-row document offsets (skip separator row)
+			const rowOffsets = [];
+			let linePos = tableFrom;
+			for (const line of md.split('\n')) {
+				if (!/^[\s|:-]+$/.test(line)) rowOffsets.push(linePos);
+				linePos += line.length + 1;
+			}
+			ranges.push(
+				Decoration.replace({ widget: new TableWidget(md, tableFrom, rowOffsets) })
+					.range(tableFrom, tableTo)
+			);
+			return false;
+		},
+	});
+	return RangeSet.of(ranges, true);
+}
+
+const tableDecoField = StateField.define({
+	create(state) { return buildTableDecorations(state); },
+	update(decos, tr) {
+		if (!tr.docChanged && !tr.selectionSet) return decos.map(tr.changes);
+		return buildTableDecorations(tr.state);
+	},
+	provide: f => EditorView.decorations.from(f),
+});
+
 // ─── Link click handling ──────────────────────────────────────────────────────
 
 function getUrlAtPos(state, pos) {
@@ -322,6 +436,7 @@ function init() {
 				keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
 				markdown({ extensions: GFM }),
 				livePreview,
+				tableDecoField,
 				linkHandler,
 				vsCodeTheme,
 				EditorView.lineWrapping,

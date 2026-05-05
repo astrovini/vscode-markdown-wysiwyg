@@ -25,16 +25,11 @@ F5 in VS Code launches the extension development host with `examples/` as worksp
 - **Inline containers** (`StrongEmphasis`, `Emphasis`, `InlineCode`, `Strikethrough`, `Link`, `Image`): `Decoration.mark({ class })` over full range, then `return`
 - **Mark nodes** (`HeaderMark`, `EmphasisMark`, `CodeMark`, etc.): cursor NOT in parent → `HIDE` (`Decoration.replace({})`); cursor IN parent → `Decoration.mark({ class: 'cm-md-mark' })` (dimmed)
 
-## Critical gotcha — `Decoration.replace({ block: true })`
 
-`to` must be `lastLine.to + 1` (= `nextLine.from`, past the `\n`), **not** `lastLine.to` (which sits ON the `\n`). Wrong boundary corrupts CodeMirror's height calculation and makes all content below the decoration invisible.
+## Known gotchas
 
-```js
-const tableTo = tl.to < doc.length ? tl.to + 1 : tl.to;
-```
+- **Table editing requires an empty line below** — the table `Decoration.replace` widget uses `tableTo = lastLine.to` (end of last line, before `\n`). If there is no blank line after the table, the cursor cannot be placed past `tableTo` and the raw markdown never shows. Workaround: always leave a blank line after a table. Fix: needs a better cursor-detection strategy (see CHANGELOG known issues).
 
 ## What's not implemented yet
 
-- **Clickable links** — add `mousedown` handler with Ctrl/Cmd check; post `{ type: 'openLink', url }` to extension; handle with `vscode.env.openExternal` in `markdownEditor.ts`
 - **Image rendering** — `ImageWidget` (`Decoration.replace` inline); add `localResourceRoots` to webview options; send `{ type: 'config', docBaseUri }` from extension on `initialized`; use `new URL(relativePath, docBaseUri)` for local paths
-- **Table rendering** — `TableWidget` with `Decoration.replace({ block: true })`; apply the `tl.to + 1` boundary rule above
