@@ -1,4 +1,4 @@
-import { time } from 'console';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { extensionState } from './extension';
 
@@ -28,7 +28,16 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		_token: vscode.CancellationToken
 	): Promise<void> {
 		// Setup initial webview HTML and settings
-		webviewPanel.webview.options = { enableScripts: true };
+		webviewPanel.webview.options = {
+			enableScripts: true,
+			localResourceRoots: [
+				this.context.extensionUri,
+				...(vscode.workspace.workspaceFolders?.map((f) => f.uri) ?? []),
+				...(document.uri.scheme === 'file'
+					? [vscode.Uri.file(path.dirname(document.uri.fsPath))]
+					: []),
+			],
+		};
 		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 
 		// Update global state when a webview is focused.
@@ -129,64 +138,57 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
 		// Receive message from the webview.
 		webviewPanel.webview.onDidReceiveMessage((e) => {
-			console.log('onDidReceiveMessage: ', [JSON.stringify(e)]);
 			switch (e.type) {
 				case 'webviewChanged':
 					this.updateTextDocument(document, e.text);
 					return;
-				case 'initialized':
+				case 'initialized': {
+					// Send the document's directory as a webview URI so the editor can
+					// resolve relative image paths.
+					if (document.uri.scheme === 'file') {
+						let docBaseUri = webviewPanel.webview
+							.asWebviewUri(vscode.Uri.file(path.dirname(document.uri.fsPath)))
+							.toString();
+						if (!docBaseUri.endsWith('/')) { docBaseUri += '/'; }
+						webviewPanel.webview.postMessage({ type: 'config', docBaseUri });
+					}
 					updateWebview();
 					return;
-				case 'plainPaste':
-					vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+				}
+				case 'openLink':
+					vscode.env.openExternal(vscode.Uri.parse(e.url));
+					return;
 			}
 		});
 	}
 
 	// Get the static html used for the editor webviews.
 	private getHtmlForWebview(webview: vscode.Webview): string {
-		// Local path to script and css for the webview
-		const initScriptUri = webview.asWebviewUri(
-			vscode.Uri.joinPath(this.context.extensionUri, 'src', 'markdownEditorInitScript.js')
-		);
-		const ckeditorUri = webview.asWebviewUri(
-			vscode.Uri.joinPath(
-				this.context.extensionUri,
-				...'ckeditor5-build-markdown/build/ckeditor.js'.split('/')
-			)
+		const codemirrorUri = webview.asWebviewUri(
+			vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'codemirror-editor.js')
 		);
 
 		// Use a nonce to only allow a specific script to be run.
 		const nonce = getNonce();
 
-		const html = String.raw; // https://prettier.io/docs/en/options.html#embedded-language-formatting
-		return html/* html */ `<!DOCTYPE html>
+		return /* html */ `<!DOCTYPE html>
 			<html lang="en">
 				<head>
 					<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}';" />
-
 					<meta charset="UTF-8" />
 					<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-					<title>Markdown WYSIWYG Editor</title>
+					<title>Markdown Editor</title>
+					<style>
+						*, *::before, *::after { box-sizing: border-box; }
+						html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+						#editor { height: 100%; }
+					</style>
 				</head>
 				<body>
 					<div id="editor"></div>
-
-					<script nonce="${nonce}" src="${ckeditorUri}"></script>
-					<script nonce="${nonce}">
-						MarkdownEditor.create(document.querySelector('#editor'))
-							.then((editor) => {
-								window.editor = editor;
-								editor.timeLastModified = new Date();
-								console.log('CKEditor instance:', editor);
-							})
-							.catch((error) => {
-								console.error('CKEditor Initialization Error:', error);
-							});
-					</script>
-					<script nonce="${nonce}" src="${initScriptUri}"></script>
+					<script nonce="${nonce}" src="${codemirrorUri}"></script>
 				</body>
-			</html> `;
+			</html>`;
 	}
 
 	// Save new content to the text document

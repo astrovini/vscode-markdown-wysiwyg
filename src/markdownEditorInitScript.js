@@ -109,3 +109,41 @@ if (state) {
 vscode.postMessage({
 	type: 'initialized',
 });
+
+// ─── Obsidian-style live syntax reveal ───────────────────────────────────────
+// When the cursor is inside a formatted element (heading, bold, italic, etc.)
+// add a CSS class so ::before/::after pseudo-elements can show the raw markers.
+
+const SYNTAX_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'STRONG', 'I', 'EM', 'CODE', 'S', 'PRE', 'BLOCKQUOTE', 'A']);
+const activeSyntaxNodes = new Set();
+
+function clearSyntaxMarkers() {
+	activeSyntaxNodes.forEach((el) => el.classList.remove('md-syntax'));
+	activeSyntaxNodes.clear();
+}
+
+function updateSyntaxMarkers() {
+	requestAnimationFrame(() => {
+		clearSyntaxMarkers();
+
+		const sel = window.getSelection();
+		if (!sel || sel.rangeCount === 0) return;
+
+		const ckContent = document.querySelector('.ck-content');
+		if (!ckContent) return;
+
+		const anchor = sel.getRangeAt(0).startContainer;
+		if (!ckContent.contains(anchor)) return;
+
+		let node = anchor;
+		while (node && node !== ckContent) {
+			if (node.nodeType === Node.ELEMENT_NODE && SYNTAX_TAGS.has(node.tagName)) {
+				node.classList.add('md-syntax');
+				activeSyntaxNodes.add(node);
+			}
+			node = node.parentNode;
+		}
+	});
+}
+
+document.addEventListener('selectionchange', updateSyntaxMarkers);

@@ -42,26 +42,28 @@ _This is italic text_
 
 _This is italic text_
 
+~~Strikethrough~~
+
 ~Strikethrough~
 
 ## Blockquotes
 
 > Blockquotes can also be nested...
-> 
+>
 > > ...by using greater-than signs right next to each other...
-> > 
+> >
 > > > ...or with spaces between arrows.
 
 ## Lists
 
 Unordered
 
-*   Create a list by starting a line with `+`, `-`, or `*`
-*   Sub-lists are made by indenting 2 spaces:
-    *   Ac tristique libero volutpat at
-    *   Facilisis in pretium nisl aliquet
-    *   Nulla volutpat aliquam velit
-*   Very easy!
+- Create a list by starting a line with `+`, `-`, or `*`
+- Sub-lists are made by indenting 2 spaces:
+  - Ac tristique libero volutpat at
+  - Facilisis in pretium nisl aliquet
+  - Nulla volutpat aliquam velit
+- Very easy!
 
 Ordered
 
@@ -89,11 +91,11 @@ line 3 of code
 
 ## Tables
 
-| Option | Description |
-| --- | --- |
-| foo | Lorem ipsum dolor sit amet, |
-| bar | Ut enim ad minim veniam, quis nostrud exercitation ullamco. |
-| baz | Excepteur sint occaecat cupidatat non proident. |
+| Option | Description                                                 |
+| ------ | ----------------------------------------------------------- |
+| foo    | Lorem ipsum dolor sit amet,                                 |
+| bar    | Ut enim ad minim veniam, quis nostrud exercitation ullamco. |
+| baz    | Excepteur sint occaecat cupidatat non proident.             |
 
 ## Links
 
@@ -140,11 +142,11 @@ H2O
 
 ### Right aligned table columns
 
-| Option | Description |
-| --- | --- |
-| foo | Lorem ipsum dolor sit amet, |
-| bar | Ut enim ad minim veniam, quis nostrud exercitation ullamco. |
-| baz | Excepteur sint occaecat cupidatat non proident. |
+| Option | Description                                                 |
+| ------ | ----------------------------------------------------------- |
+| foo    | Lorem ipsum dolor sit amet,                                 |
+| bar    | Ut enim ad minim veniam, quis nostrud exercitation ullamco. |
+| baz    | Excepteur sint occaecat cupidatat non proident.             |
 
 ### Syntax highlighting
 

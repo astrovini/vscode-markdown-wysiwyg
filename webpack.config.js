@@ -49,4 +49,17 @@ const config = {
 	},
 };
 
-module.exports = config;
+// Webview bundle – CodeMirror editor (runs in the browser, not Node)
+const webviewConfig = {
+	target: 'web',
+	entry: './src/codemirror-editor.js',
+	output: {
+		path: path.resolve(__dirname, 'dist'),
+		filename: 'codemirror-editor.js',
+	},
+	devtool: 'source-map',
+	resolve: { extensions: ['.js'] },
+	module: { rules: [] },
+};
+
+module.exports = [config, webviewConfig];

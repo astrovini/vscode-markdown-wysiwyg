@@ -106,6 +106,12 @@
 		"webpack-cli": "^5.0.1"
 	},
 	"dependencies": {
+		"@codemirror/commands": "^6.10.3",
+		"@codemirror/lang-markdown": "^6.5.0",
+		"@codemirror/language": "^6.12.3",
+		"@codemirror/state": "^6.6.0",
+		"@codemirror/view": "^6.41.1",
+		"@lezer/markdown": "^1.6.3",
 		"prettier": "^2.8.1"
 	}
 }
