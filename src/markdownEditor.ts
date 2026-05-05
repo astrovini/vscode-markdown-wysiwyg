@@ -139,6 +139,21 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				case 'plainPaste':
 					vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+					return;
+				case 'openLink': {
+					const url: string = e.url;
+					if (!url) return;
+					if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) {
+						vscode.env.openExternal(vscode.Uri.parse(url));
+					} else if (url.startsWith('#')) {
+						// anchor-only: no actionable target from extension host
+					} else {
+						const docDir = vscode.Uri.joinPath(document.uri, '..');
+						const targetUri = vscode.Uri.joinPath(docDir, url);
+						vscode.commands.executeCommand('vscode.open', targetUri);
+					}
+					return;
+				}
 			}
 		});
 	}

@@ -5,6 +5,9 @@ import { GFM } from '@lezer/markdown';
 import { syntaxTree } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 
+let _vscode = null;
+let _lastMousePos = null;
+
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
 const vsCodeTheme = EditorView.theme({
@@ -76,6 +79,7 @@ const vsCodeTheme = EditorView.theme({
 	},
 	// ── Links ─────────────────────────────────────────────────────────────
 	'.cm-md-link': { color: 'var(--vscode-textLink-foreground)' },
+	'&.cm-link-hover .cm-md-link': { cursor: 'pointer', textDecoration: 'underline' },
 	// ── Bullet replacement ────────────────────────────────────────────────
 	'.cm-md-bullet': {
 		display: 'inline-block',
@@ -247,11 +251,66 @@ const livePreview = ViewPlugin.fromClass(
 	{ decorations: (v) => v.decorations }
 );
 
+// ─── Link click handling ──────────────────────────────────────────────────────
+
+function getUrlAtPos(state, pos) {
+	let node = syntaxTree(state).resolveInner(pos, 1);
+	while (node && node.name !== 'Link' && node.name !== 'Image') {
+		node = node.parent;
+	}
+	if (!node) return null;
+	let child = node.firstChild;
+	while (child) {
+		if (child.name === 'URL') return state.doc.sliceString(child.from, child.to);
+		child = child.nextSibling;
+	}
+	return null;
+}
+
+const linkHandler = EditorView.domEventHandlers({
+	mousedown(event, view) {
+		if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
+		const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+		if (pos == null) return false;
+		const url = getUrlAtPos(view.state, pos);
+		if (!url) return false;
+		event.preventDefault();
+		_vscode.postMessage({ type: 'openLink', url });
+		return true;
+	},
+	mousemove(event, view) {
+		_lastMousePos = { x: event.clientX, y: event.clientY };
+		if (!(event.ctrlKey || event.metaKey)) {
+			view.dom.classList.remove('cm-link-hover');
+			return false;
+		}
+		const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+		const url = pos != null ? getUrlAtPos(view.state, pos) : null;
+		view.dom.classList.toggle('cm-link-hover', url !== null);
+		return false;
+	},
+	keydown(event, view) {
+		if ((event.key === 'Control' || event.key === 'Meta') && _lastMousePos) {
+			const pos = view.posAtCoords(_lastMousePos);
+			const url = pos != null ? getUrlAtPos(view.state, pos) : null;
+			view.dom.classList.toggle('cm-link-hover', url !== null);
+		}
+		return false;
+	},
+	keyup(event, view) {
+		if (event.key === 'Control' || event.key === 'Meta') {
+			view.dom.classList.remove('cm-link-hover');
+		}
+		return false;
+	},
+});
+
 // ─── Editor initialisation ────────────────────────────────────────────────────
 
 function init() {
 	/* global acquireVsCodeApi */
-	const vscode = acquireVsCodeApi();
+	_vscode = acquireVsCodeApi();
+	const vscode = _vscode;
 	let suppressChange = false;
 
 	const view = new EditorView({
@@ -263,6 +322,7 @@ function init() {
 				keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
 				markdown({ extensions: GFM }),
 				livePreview,
+				linkHandler,
 				vsCodeTheme,
 				EditorView.lineWrapping,
 				EditorView.updateListener.of((update) => {

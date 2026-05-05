@@ -1,0 +1,22 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "npm: webpack",
+			"command": "source ~/.nvm/nvm.sh && npm run webpack",
+			"options": {
+				"shell": {
+					"executable": "/bin/zsh",
+					"args": ["-c"]
+				}
+			},
+			"group": "build",
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"problemMatcher": []
+		}
+	]
+}
