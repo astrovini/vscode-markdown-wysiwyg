@@ -6,8 +6,10 @@ Obsidian-style live-preview markdown editor for VS Code. Opens `.md` files with 
 
 ## Features
 
-- **Live preview** — headings, bold, italic, inline code, strikethrough, blockquotes, code blocks, and bullet lists render visually while keeping the raw markdown editable
+- **Live preview** — headings, bold, italic, inline code, strikethrough, blockquotes, code blocks, bullet lists, tables, and images render visually while keeping the raw markdown editable
 - **Obsidian-style cursor behaviour** — syntax markers (`#`, `**`, `` ` ``, etc.) reveal themselves when the cursor is inside a formatted element, disappear when it moves out
+- **Image rendering** — local (relative path) and remote (`https://`) images render inline; broken images show a styled fallback
+- **Clickable links** — Ctrl/Cmd+click opens links in the browser or VS Code
 - **VS Code theme integration** — inherits your editor colors and font
 - **GFM support** — GitHub Flavored Markdown (tables, strikethrough, autolinks, task lists)
 - Toggle between WYSIWYG and plain-text editor at any time
@@ -20,10 +22,9 @@ Obsidian-style live-preview markdown editor for VS Code. Opens `.md` files with 
 
 ## Known limitations
 
-- Links are styled but not clickable (planned)
-- Images are hidden, not rendered (planned)
-- Tables show as raw markdown, not as rendered HTML tables (planned)
 - Strikethrough requires `~~double tildes~~` (GFM standard); single `~tilde~` is not supported
+- Table click-to-edit is unreliable in some cases — add a blank line after the table as a workaround
+- Image paths with `../` (going up directories) are not resolved
 
 ## Development
 

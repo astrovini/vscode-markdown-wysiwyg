@@ -28,7 +28,15 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		_token: vscode.CancellationToken
 	): Promise<void> {
 		// Setup initial webview HTML and settings
-		webviewPanel.webview.options = { enableScripts: true };
+		const docDir = vscode.Uri.joinPath(document.uri, '..');
+		webviewPanel.webview.options = {
+			enableScripts: true,
+			localResourceRoots: [
+				docDir,
+				this.context.extensionUri,
+				...(vscode.workspace.workspaceFolders?.map(f => f.uri) ?? []),
+			],
+		};
 		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 
 		// Update global state when a webview is focused.
@@ -134,9 +142,12 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 				case 'webviewChanged':
 					this.updateTextDocument(document, e.text);
 					return;
-				case 'initialized':
+				case 'initialized': {
 					updateWebview();
+					const docBaseUri = webviewPanel.webview.asWebviewUri(docDir).toString();
+					webviewPanel.webview.postMessage({ type: 'config', docBaseUri });
 					return;
+				}
 				case 'plainPaste':
 					vscode.commands.executeCommand('editor.action.clipboardPasteAction');
 					return;
@@ -170,7 +181,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		return /* html */ `<!DOCTYPE html>
 			<html lang="en">
 				<head>
-					<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}';" />
+					<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src https: ${webview.cspSource} data:;" />
 					<meta charset="UTF-8" />
 					<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 					<title>Markdown Editor</title>

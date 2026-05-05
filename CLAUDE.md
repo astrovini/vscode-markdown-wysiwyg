@@ -22,7 +22,8 @@ F5 in VS Code launches the extension development host with `examples/` as worksp
 `buildDecorations(view)` walks the lezer-markdown syntax tree over `view.visibleRanges` and returns `RangeSet.of(ranges, true)`.
 
 - **Block containers** (`ATXHeading`, `FencedCode`, `Blockquote`): `Decoration.line({ class })` per line, then `return` (undefined = still descend into children for marks)
-- **Inline containers** (`StrongEmphasis`, `Emphasis`, `InlineCode`, `Strikethrough`, `Link`, `Image`): `Decoration.mark({ class })` over full range, then `return`
+- **Inline containers** (`StrongEmphasis`, `Emphasis`, `InlineCode`, `Strikethrough`, `Link`): `Decoration.mark({ class })` over full range, then `return`
+- **Image**: cursor IN node → `Decoration.mark({ class: 'cm-md-link' })` + descend (raw text, dimmed marks); cursor OUT → `Decoration.replace({ widget: new ImageWidget(src, alt) })` + `return false`
 - **Mark nodes** (`HeaderMark`, `EmphasisMark`, `CodeMark`, etc.): cursor NOT in parent → `HIDE` (`Decoration.replace({})`); cursor IN parent → `Decoration.mark({ class: 'cm-md-mark' })` (dimmed)
 
 
@@ -30,6 +31,3 @@ F5 in VS Code launches the extension development host with `examples/` as worksp
 
 - **Table editing requires an empty line below** — the table `Decoration.replace` widget uses `tableTo = lastLine.to` (end of last line, before `\n`). If there is no blank line after the table, the cursor cannot be placed past `tableTo` and the raw markdown never shows. Workaround: always leave a blank line after a table. Fix: needs a better cursor-detection strategy (see CHANGELOG known issues).
 
-## What's not implemented yet
-
-- **Image rendering** — `ImageWidget` (`Decoration.replace` inline); add `localResourceRoots` to webview options; send `{ type: 'config', docBaseUri }` from extension on `initialized`; use `new URL(relativePath, docBaseUri)` for local paths

@@ -1,9 +1,29 @@
 import { EditorView, ViewPlugin, Decoration, WidgetType, keymap, drawSelection } from '@codemirror/view';
-import { EditorState, RangeSet, StateField } from '@codemirror/state';
+import { EditorState, RangeSet, StateField, StateEffect } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { GFM } from '@lezer/markdown';
 import { syntaxTree } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+
+// ─── docBaseUri state ─────────────────────────────────────────────────────────
+
+const setDocBaseUriEffect = StateEffect.define();
+
+const docBaseUriField = StateField.define({
+	create() { return ''; },
+	update(value, tr) {
+		for (const e of tr.effects) if (e.is(setDocBaseUriEffect)) return e.value;
+		return value;
+	},
+});
+
+function resolveImageSrc(url, docBaseUri) {
+	if (!url) return '';
+	if (/^https?:\/\//i.test(url) || /^data:/i.test(url)) return url;
+	if (!docBaseUri || url.startsWith('#') || /^mailto:/i.test(url)) return '';
+	const base = docBaseUri.endsWith('/') ? docBaseUri : docBaseUri + '/';
+	return base + url.replace(/^\.\//, '');
+}
 
 let _vscode = null;
 let _lastMousePos = null;
@@ -120,6 +140,9 @@ const vsCodeTheme = EditorView.theme({
 		borderBottom: '2px solid var(--vscode-badge-background)',
 		opacity: '0.5',
 	},
+	// ── Image ─────────────────────────────────────────────────────────────
+	'.cm-md-image img': { maxWidth: '100%', display: 'block', margin: '4px 0' },
+	'&.cm-link-hover .cm-md-image': { cursor: 'pointer' },
 });
 
 // ─── Live preview decorations ─────────────────────────────────────────────────
@@ -203,11 +226,41 @@ function buildDecorations(view) {
 					InlineCode: 'cm-md-code',
 					Strikethrough: 'cm-md-strike',
 					Link: 'cm-md-link',
-					Image: 'cm-md-link',
 				};
 				if (INLINE_CLASS[name]) {
 					ranges.push(Decoration.mark({ class: INLINE_CLASS[name] }).range(nFrom, nTo));
 					return; // descend for mark children
+				}
+
+				if (name === 'Image') {
+					if (cursorInRange(nFrom, nTo)) {
+						// cursor inside — show raw markdown with link styling
+						ranges.push(Decoration.mark({ class: 'cm-md-link' }).range(nFrom, nTo));
+						return; // descend so LinkMark/URL/LinkTitle get dimmed
+					}
+					// cursor outside — render the image widget
+					const docBaseUri = view.state.field(docBaseUriField);
+					let url = '', child = node.node.firstChild;
+					while (child) {
+						if (child.name === 'URL') { url = doc.sliceString(child.from, child.to); break; }
+						child = child.nextSibling;
+					}
+					let altFrom = nFrom + 2, altTo = nFrom + 2, linkMarkCount = 0;
+					child = node.node.firstChild;
+					while (child) {
+						if (child.name === 'LinkMark' && ++linkMarkCount === 2) { altTo = child.from; break; }
+						child = child.nextSibling;
+					}
+					const src = resolveImageSrc(url, docBaseUri);
+					if (src) {
+						ranges.push(
+							Decoration.replace({ widget: new ImageWidget(src, doc.sliceString(altFrom, altTo)) })
+								.range(nFrom, nTo)
+						);
+					} else {
+						ranges.push(Decoration.mark({ class: 'cm-md-link' }).range(nFrom, nTo));
+					}
+					return false; // don't descend — children are inside the replaced range
 				}
 
 				// ── Marks ─────────────────────────────────────────────────────
@@ -365,6 +418,33 @@ const tableDecoField = StateField.define({
 	provide: f => EditorView.decorations.from(f),
 });
 
+// ─── Image rendering ──────────────────────────────────────────────────────────
+
+class ImageWidget extends WidgetType {
+	constructor(src, alt) {
+		super();
+		this.src = src;
+		this.alt = alt;
+	}
+	eq(other) { return other.src === this.src && other.alt === this.alt; }
+	ignoreEvent() { return false; }
+	toDOM() {
+		const wrap = document.createElement('span');
+		wrap.className = 'cm-md-image';
+		const img = document.createElement('img');
+		img.src = this.src;
+		img.alt = this.alt;
+		img.addEventListener('error', () => {
+			const span = document.createElement('span');
+			span.textContent = this.alt ? `[Image: ${this.alt}]` : '[Image]';
+			span.style.cssText = 'color:var(--vscode-errorForeground);font-style:italic;opacity:.7';
+			wrap.replaceWith(span);
+		});
+		wrap.appendChild(img);
+		return wrap;
+	}
+}
+
 // ─── Link click handling ──────────────────────────────────────────────────────
 
 function getUrlAtPos(state, pos) {
@@ -437,6 +517,7 @@ function init() {
 				markdown({ extensions: GFM }),
 				livePreview,
 				tableDecoField,
+				docBaseUriField,
 				linkHandler,
 				vsCodeTheme,
 				EditorView.lineWrapping,
@@ -454,6 +535,10 @@ function init() {
 
 	window.addEventListener('message', (event) => {
 		const { type, text } = event.data;
+		if (type === 'config') {
+			view.dispatch({ effects: setDocBaseUriEffect.of(event.data.docBaseUri ?? '') });
+			return;
+		}
 		if (type === 'documentChanged') {
 			const current = view.state.doc.toString();
 			if (text !== current) {
