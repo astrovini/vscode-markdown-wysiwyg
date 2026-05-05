@@ -1,4 +1,4 @@
-import * as path from 'path';
+import { time } from 'console';
 import * as vscode from 'vscode';
 import { extensionState } from './extension';
 
@@ -28,16 +28,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		_token: vscode.CancellationToken
 	): Promise<void> {
 		// Setup initial webview HTML and settings
-		webviewPanel.webview.options = {
-			enableScripts: true,
-			localResourceRoots: [
-				this.context.extensionUri,
-				...(vscode.workspace.workspaceFolders?.map((f) => f.uri) ?? []),
-				...(document.uri.scheme === 'file'
-					? [vscode.Uri.file(path.dirname(document.uri.fsPath))]
-					: []),
-			],
-		};
+		webviewPanel.webview.options = { enableScripts: true };
 		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 
 		// Update global state when a webview is focused.
@@ -138,26 +129,16 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
 		// Receive message from the webview.
 		webviewPanel.webview.onDidReceiveMessage((e) => {
+			console.log('onDidReceiveMessage: ', [JSON.stringify(e)]);
 			switch (e.type) {
 				case 'webviewChanged':
 					this.updateTextDocument(document, e.text);
 					return;
-				case 'initialized': {
-					// Send the document's directory as a webview URI so the editor can
-					// resolve relative image paths.
-					if (document.uri.scheme === 'file') {
-						let docBaseUri = webviewPanel.webview
-							.asWebviewUri(vscode.Uri.file(path.dirname(document.uri.fsPath)))
-							.toString();
-						if (!docBaseUri.endsWith('/')) { docBaseUri += '/'; }
-						webviewPanel.webview.postMessage({ type: 'config', docBaseUri });
-					}
+				case 'initialized':
 					updateWebview();
 					return;
-				}
-				case 'openLink':
-					vscode.env.openExternal(vscode.Uri.parse(e.url));
-					return;
+				case 'plainPaste':
+					vscode.commands.executeCommand('editor.action.clipboardPasteAction');
 			}
 		});
 	}
