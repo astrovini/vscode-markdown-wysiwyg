@@ -1,5 +1,4 @@
 **/*
-!**/dist/**/*
+!dist/**/*
 !LICENSE.txt
-!ckeditor5-build-markdown/build/**/*
-!**/src/markdownEditorInitScript.js
+!package.json

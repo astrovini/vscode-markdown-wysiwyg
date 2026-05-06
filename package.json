@@ -1,14 +1,14 @@
 {
-	"name": "markdown-wysiwyg",
-	"displayName": "Markdown Editor",
-	"description": "A powerful markdown WYSIWYG editor",
-	"version": "0.7.7",
-	"publisher": "adamerose",
+	"name": "markdown-live-editor",
+	"displayName": "Markdown Live Editor",
+	"description": "Obsidian-style live preview markdown editor — hides syntax as you write, renders tables, images and links inline",
+	"version": "1.0.0",
+	"publisher": "astrovini",
 	"private": true,
 	"license": "GPLv3",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/adamerose/vscode-markdown-wysiwyg"
+		"url": "https://github.com/astrovini/vscode-markdown-live-editor"
 	},
 	"engines": {
 		"vscode": "^1.32.0"
@@ -21,7 +21,8 @@
 		"markdown",
 		"editor",
 		"wysiwyg",
-		"ckeditor"
+		"live preview",
+		"codemirror"
 	],
 	"activationEvents": [
 		"onCustomEditor:markdownEditor.customEditor",
@@ -109,8 +110,11 @@
 		"@codemirror/commands": "^6.10.3",
 		"@codemirror/lang-markdown": "^6.5.0",
 		"@codemirror/language": "^6.12.3",
+		"@codemirror/language-data": "^6.5.2",
 		"@codemirror/state": "^6.6.0",
 		"@codemirror/view": "^6.41.1",
+		"@fontsource/inter": "^5.2.8",
+		"@lezer/highlight": "^1.2.3",
 		"@lezer/markdown": "^1.6.3",
 		"prettier": "^2.8.1"
 	}

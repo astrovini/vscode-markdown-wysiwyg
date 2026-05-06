@@ -1,8 +1,14 @@
+import inter400 from '@fontsource/inter/files/inter-latin-400-normal.woff2';
+import inter500 from '@fontsource/inter/files/inter-latin-500-normal.woff2';
+import inter600 from '@fontsource/inter/files/inter-latin-600-normal.woff2';
+import inter700 from '@fontsource/inter/files/inter-latin-700-normal.woff2';
 import { EditorView, ViewPlugin, Decoration, WidgetType, keymap, drawSelection } from '@codemirror/view';
 import { EditorState, RangeSet, StateField, StateEffect } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { GFM } from '@lezer/markdown';
-import { syntaxTree } from '@codemirror/language';
+import { syntaxTree, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { languages } from '@codemirror/language-data';
+import { tags as t } from '@lezer/highlight';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 
 // ─── docBaseUri state ─────────────────────────────────────────────────────────
@@ -28,25 +34,73 @@ function resolveImageSrc(url, docBaseUri) {
 let _vscode = null;
 let _lastMousePos = null;
 
+// ─── GitHub Theme CSS vars ─────────────────────────────────────────────────────
+
+function injectGitHubThemeVars() {
+	const style = document.createElement('style');
+	style.textContent = `
+		@font-face { font-family: 'Inter'; font-weight: 400; font-style: normal; src: url('${inter400}') format('woff2'); }
+		@font-face { font-family: 'Inter'; font-weight: 500; font-style: normal; src: url('${inter500}') format('woff2'); }
+		@font-face { font-family: 'Inter'; font-weight: 600; font-style: normal; src: url('${inter600}') format('woff2'); }
+		@font-face { font-family: 'Inter'; font-weight: 700; font-style: normal; src: url('${inter700}') format('woff2'); }
+		body {
+			--gh-bg: #0d1117; --gh-bg-alt: #161b22; --gh-border: #30363d;
+			--gh-text: #c9d1d9; --gh-text-muted: #8b949e; --gh-text-faint: #6e7681;
+			--gh-heading: #e6edf3;
+			--gh-accent: #58a6ff;
+			--gh-code-bg: rgba(110,118,129,0.4); --gh-code-block-bg: #161b22;
+			--gh-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', system-ui, sans-serif;
+			--gh-hl-keyword: #ff7b72;
+			--gh-hl-string: #a5d6ff;
+			--gh-hl-comment: #8b949e;
+			--gh-hl-number: #79c0ff;
+			--gh-hl-function: #d2a8ff;
+			--gh-hl-type: #ffa657;
+			--gh-hl-property: #79c0ff;
+			--gh-hl-punctuation: #c9d1d9;
+			--gh-hl-variable: #c9d1d9;
+		}
+		body.vscode-light {
+			--gh-bg: #ffffff; --gh-bg-alt: #f6f8fa; --gh-border: #d0d7de;
+			--gh-text: #24292f; --gh-text-muted: #57606a; --gh-text-faint: #6e7781;
+			--gh-heading: #1c2128;
+			--gh-accent: #0969da;
+			--gh-code-bg: rgba(174,184,193,0.2); --gh-code-block-bg: #f6f8fa;
+			--gh-hl-keyword: #cf222e;
+			--gh-hl-string: #0a3069;
+			--gh-hl-comment: #6e7781;
+			--gh-hl-number: #0550ae;
+			--gh-hl-function: #8250df;
+			--gh-hl-type: #953800;
+			--gh-hl-property: #0550ae;
+			--gh-hl-punctuation: #24292f;
+			--gh-hl-variable: #24292f;
+		}
+	`;
+	document.head.appendChild(style);
+}
+
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
 const vsCodeTheme = EditorView.theme({
 	'&': {
 		height: '100%',
-		backgroundColor: 'var(--vscode-editor-background)',
-		color: 'var(--vscode-editor-foreground)',
-		fontFamily: 'var(--vscode-editor-font-family)',
-		fontSize: 'var(--vscode-editor-font-size)',
+		backgroundColor: 'var(--gh-bg)',
+		color: 'var(--gh-text)',
+		fontFamily: 'var(--gh-font)',
+		fontSize: '14px',
+		fontFeatureSettings: '"cv05", "cv08"',
 	},
 	'.cm-scroller': {
 		overflow: 'auto',
 		padding: '0 42px 40px',
-		lineHeight: '1.6',
+		lineHeight: '1.7',
+		letterSpacing: '0.01em',
 	},
 	'.cm-content': {
 		caretColor: 'var(--vscode-editorCursor-foreground)',
-		padding: '20px 0',
-		maxWidth: '860px',
+		padding: '28px 0',
+		maxWidth: '780px',
 	},
 	'.cm-cursor, .cm-dropCursor': {
 		borderLeftColor: 'var(--vscode-editorCursor-foreground)',
@@ -56,19 +110,13 @@ const vsCodeTheme = EditorView.theme({
 	},
 	'&.cm-focused': { outline: 'none' },
 	'.cm-line': { padding: '0' },
-	// ── Headings ──────────────────────────────────────────────────────────
-	'.cm-md-h1': {
-		fontSize: '2em',
-		fontWeight: 'bold',
-		borderBottom: '1px solid var(--vscode-badge-background)',
-		lineHeight: '1.4',
-		paddingBottom: '2px',
-	},
-	'.cm-md-h2': { fontSize: '1.5em', fontWeight: 'bold', lineHeight: '1.4' },
-	'.cm-md-h3': { fontSize: '1.25em', fontWeight: 'bold' },
-	'.cm-md-h4': { fontSize: '1.1em', fontWeight: 'bold' },
-	'.cm-md-h5': { fontSize: '1em', fontWeight: 'bold' },
-	'.cm-md-h6': { fontSize: '0.85em', fontWeight: 'bold', opacity: '0.7' },
+	// ── Headings — monochromatic, hierarchy via size + weight + tracking ─
+	'.cm-md-h1': { fontSize: '2em',    fontWeight: '700', lineHeight: '1.2', letterSpacing: '-0.02em', color: 'var(--gh-heading)', marginTop: '0.1em' },
+	'.cm-md-h2': { fontSize: '1.5em',  fontWeight: '600', lineHeight: '1.25', letterSpacing: '-0.015em', color: 'var(--gh-heading)' },
+	'.cm-md-h3': { fontSize: '1.25em', fontWeight: '600', lineHeight: '1.3', letterSpacing: '-0.01em',  color: 'var(--gh-heading)' },
+	'.cm-md-h4': { fontSize: '1.1em',  fontWeight: '600', lineHeight: '1.4',                            color: 'var(--gh-heading)' },
+	'.cm-md-h5': { fontSize: '1em',    fontWeight: '500', lineHeight: '1.5', letterSpacing: '0.01em',   color: 'var(--gh-text-muted)' },
+	'.cm-md-h6': { fontSize: '0.9em',  fontWeight: '500', lineHeight: '1.5', letterSpacing: '0.03em',   color: 'var(--gh-text-faint)', textTransform: 'uppercase' },
 	// ── Syntax marks (dimmed when cursor is inside element) ───────────────
 	'.cm-md-mark': { opacity: '0.4' },
 	// ── Inline formatting ─────────────────────────────────────────────────
@@ -77,14 +125,14 @@ const vsCodeTheme = EditorView.theme({
 	'.cm-md-strike': { textDecoration: 'line-through' },
 	'.cm-md-code': {
 		fontFamily: 'var(--vscode-editor-font-family)',
-		color: 'var(--vscode-textPreformat-foreground)',
-		backgroundColor: 'var(--vscode-textBlockQuote-background)',
-		borderRadius: '3px',
-		padding: '1px 4px',
+		color: 'var(--gh-text)',
+		backgroundColor: 'var(--gh-code-bg)',
+		borderRadius: '6px',
+		padding: '0.2em 0.4em',
 	},
 	// ── Code block ────────────────────────────────────────────────────────
 	'.cm-md-codeblock': {
-		backgroundColor: 'var(--vscode-textCodeBlock-background)',
+		backgroundColor: 'var(--gh-code-block-bg)',
 		fontFamily: 'var(--vscode-editor-font-family)',
 		display: 'block',
 		padding: '0 16px',
@@ -92,62 +140,96 @@ const vsCodeTheme = EditorView.theme({
 	},
 	// ── Blockquote ────────────────────────────────────────────────────────
 	'.cm-md-blockquote': {
-		borderLeft: '4px solid var(--vscode-badge-background)',
+		borderLeft: '0.25em solid var(--gh-accent)',
 		paddingLeft: '12px',
-		opacity: '0.85',
+		color: 'var(--gh-text-muted)',
 		display: 'block',
 	},
 	// ── Links ─────────────────────────────────────────────────────────────
-	'.cm-md-link': { color: 'var(--vscode-textLink-foreground)' },
+	'.cm-md-link': { color: 'var(--gh-accent)' },
 	'&.cm-link-hover .cm-md-link': { cursor: 'pointer', textDecoration: 'underline' },
 	// ── Table ─────────────────────────────────────────────────────────────
 	'.cm-md-table': { borderCollapse: 'collapse', width: '100%', marginBottom: '1em' },
 	'.cm-md-table th, .cm-md-table td': {
-		border: '1px solid var(--vscode-badge-background)',
-		padding: '6px 12px',
+		border: '1px solid var(--gh-border)',
+		padding: '6px 13px',
 		textAlign: 'left',
 	},
 	'.cm-md-table th': {
-		backgroundColor: 'var(--vscode-textBlockQuote-background)',
-		fontWeight: 'bold',
-	},
-	'.cm-md-table tr:nth-child(even)': {
-		backgroundColor: 'var(--vscode-textBlockQuote-background)',
-	},
-	// ── Table ─────────────────────────────────────────────────────────────
-	'.cm-md-table': { borderCollapse: 'collapse', width: '100%', marginBottom: '1em' },
-	'.cm-md-table th, .cm-md-table td': {
-		border: '1px solid var(--vscode-badge-background)',
-		padding: '6px 12px',
-		textAlign: 'left',
-	},
-	'.cm-md-table th': {
-		backgroundColor: 'var(--vscode-textBlockQuote-background)',
-		fontWeight: 'bold',
+		backgroundColor: 'var(--gh-bg-alt)',
+		fontWeight: '600',
 	},
 	'.cm-md-table tr:nth-child(even) td': {
-		backgroundColor: 'var(--vscode-textBlockQuote-background)',
+		backgroundColor: 'var(--gh-bg-alt)',
 	},
 	// ── Bullet replacement ────────────────────────────────────────────────
 	'.cm-md-bullet': {
 		display: 'inline-block',
 		width: '1.2em',
-		color: 'var(--vscode-editor-foreground)',
+		color: 'var(--gh-text)',
 	},
 	// ── Horizontal rule ───────────────────────────────────────────────────
 	'.cm-md-hr': {
-		display: 'block',
-		borderBottom: '2px solid var(--vscode-badge-background)',
+		border: 'none',
+		borderTop: '2px solid var(--gh-border)',
+		margin: '0.5em 0',
 		opacity: '0.5',
+		width: '100%',
 	},
 	// ── Image ─────────────────────────────────────────────────────────────
 	'.cm-md-image img': { maxWidth: '100%', display: 'block', margin: '4px 0' },
 	'&.cm-link-hover .cm-md-image': { cursor: 'pointer' },
 });
 
+// ─── Syntax highlight style (GitHub-flavored, dark + light) ──────────────────
+
+const githubHighlight = HighlightStyle.define([
+	// Keywords: red
+	{ tag: [t.keyword, t.operatorKeyword, t.modifier, t.definitionKeyword],
+	  color: 'var(--gh-hl-keyword)' },
+	// Strings: cyan/teal
+	{ tag: [t.string, t.special(t.string), t.regexp],
+	  color: 'var(--gh-hl-string)' },
+	// Comments: muted
+	{ tag: [t.comment, t.lineComment, t.blockComment],
+	  color: 'var(--gh-hl-comment)', fontStyle: 'italic' },
+	// Numbers, booleans
+	{ tag: [t.number, t.bool, t.null],
+	  color: 'var(--gh-hl-number)' },
+	// Functions / method names
+	{ tag: [t.function(t.variableName), t.function(t.propertyName), t.macroName],
+	  color: 'var(--gh-hl-function)' },
+	// Types, class names
+	{ tag: [t.typeName, t.className, t.namespace, t.definition(t.typeName)],
+	  color: 'var(--gh-hl-type)' },
+	// Properties / attributes
+	{ tag: [t.propertyName, t.attributeName],
+	  color: 'var(--gh-hl-property)' },
+	// Operators, punctuation
+	{ tag: [t.operator, t.punctuation, t.separator],
+	  color: 'var(--gh-hl-punctuation)' },
+	// Tags (HTML/JSX)
+	{ tag: [t.tagName, t.angleBracket],
+	  color: 'var(--gh-hl-keyword)' },
+	// Variable names
+	{ tag: [t.variableName, t.definition(t.variableName)],
+	  color: 'var(--gh-hl-variable)' },
+]);
+
 // ─── Live preview decorations ─────────────────────────────────────────────────
 
 const HIDE = Decoration.replace({});
+
+class HRWidget extends WidgetType {
+	toDOM() {
+		const hr = document.createElement('hr');
+		hr.className = 'cm-md-hr';
+		hr.setAttribute('aria-hidden', 'true');
+		return hr;
+	}
+	ignoreEvent() { return false; }
+}
+const HR = new HRWidget();
 
 class BulletWidget extends WidgetType {
 	toDOM() {
@@ -214,9 +296,12 @@ function buildDecorations(view) {
 				}
 
 				if (name === 'HorizontalRule') {
-					const line = doc.lineAt(nFrom);
-					ranges.push(Decoration.line({ class: 'cm-md-hr' }).range(line.from, line.from));
-					return;
+					if (cursorInRange(nFrom, nTo)) {
+						ranges.push(Decoration.mark({ class: 'cm-md-mark' }).range(nFrom, nTo));
+					} else {
+						ranges.push(Decoration.replace({ widget: HR }).range(nFrom, nTo));
+					}
+					return false;
 				}
 
 				// ── Inline containers ─────────────────────────────────────────
@@ -502,6 +587,7 @@ const linkHandler = EditorView.domEventHandlers({
 // ─── Editor initialisation ────────────────────────────────────────────────────
 
 function init() {
+	injectGitHubThemeVars();
 	/* global acquireVsCodeApi */
 	_vscode = acquireVsCodeApi();
 	const vscode = _vscode;
@@ -514,7 +600,8 @@ function init() {
 				history(),
 				drawSelection(),
 				keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-				markdown({ extensions: GFM }),
+				markdown({ extensions: GFM, codeLanguages: languages }),
+				syntaxHighlighting(githubHighlight),
 				livePreview,
 				tableDecoField,
 				docBaseUriField,

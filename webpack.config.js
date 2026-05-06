@@ -59,7 +59,14 @@ const webviewConfig = {
 	},
 	devtool: 'source-map',
 	resolve: { extensions: ['.js'] },
-	module: { rules: [] },
+	module: {
+		rules: [
+			{
+				test: /\.(woff2?)$/,
+				type: 'asset/inline', // base64-inlines fonts into the bundle
+			},
+		],
+	},
 };
 
 module.exports = [config, webviewConfig];
