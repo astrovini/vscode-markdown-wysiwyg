@@ -28,8 +28,30 @@ Obsidian-style live-preview markdown editor for VS Code. Opens `.md` files with 
 
 ## Development
 
+**Prerequisites:** Node.js 18+, VS Code
+
+```bash
+git clone https://github.com/astrovini/vscode-markdown-live-editor
+cd vscode-markdown-live-editor
+npm install
+npm run webpack        # builds dist/extension.js and dist/codemirror-editor.js
+```
+
+Press **F5** in VS Code to launch the Extension Development Host. Open any `.md` file to test.
+
+## Build and install locally
+
 ```bash
 npm install
-npm run webpack   # build extension + webview bundles
-# then F5 in VS Code to launch the extension development host
+npm run webpack        # development build (source maps included)
+npx @vscode/vsce package   # produces markdown-live-editor-<version>.vsix
+code --install-extension markdown-live-editor-<version>.vsix
 ```
+
+Then **Reload Window** (Ctrl+Shift+P → "Reload Window") and open any `.md` file.
+
+## Publish to Marketplace
+
+1. Create a publisher at https://marketplace.visualstudio.com/manage
+2. Generate a PAT in Azure DevOps (Marketplace → Manage scope)
+3. Run `npx @vscode/vsce publish` and paste the token when prompted
